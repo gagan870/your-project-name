@@ -1,66 +1,60 @@
 <?php
-/**
- * File: includes/frontend-form-handler.php
- * Purpose: Handle frontend form submissions (popup / shortcode / page)
- *          - Save to DB
- *          - Send auto-confirmation email to user
- *          - Return JSON for SweetAlert2
- */
+function show_simple_custom_form_shortcode(){
+ob_start(); // start collecting HTML
 
-if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+if( isset($_POST['simple_form_submitted'])){
+    $username = sanitize_text_field($_POST['name']);
+    $email = sanitize_email($_POST['email']);
+    $message = sanitize_textarea_field($_POST['message']);
+  
+    // Very basic validation
+        if (!empty($name) && !empty($email) && is_email($email)) {
+
+            global $wpdb;
+            $table = $wpdb->prefix . 'my_form_data';
+
+            $wpdb->insert(
+                $table,
+                [
+                    'name'      => $name,
+                    'email'     => $email,
+                    'message'   => $message,
+                    'active'    => 1,
+                    'date_time' => current_time('mysql')
+                ],
+                ['%s', '%s', '%s', '%d', '%s']
+            );
+
+            // Optional: send your email
+            if (function_exists('my_form_send_email_to_user')) {
+                my_form_send_email_to_user($name, $email, $message);
+            }
+
+            echo '<div style="background:#d4edda; color:#155724; padding:15px; margin:20px 0; border:1px solid #c3e6cb; text-align:center;">';
+            echo '<strong>Thank you!</strong> Your message has been sent.';
+            echo '</div>';
+        } else {
+            echo '<div style="background:#f8d7da; color:#721c24; padding:15px; margin:20px 0; border:1px solid #f5c6cb; text-align:center;">';
+            echo 'Please fill name and valid email.';
+            echo '</div>';
+        }
+
 }
 
-// Include email function if not already loaded
-require_once __DIR__ . '/email-functions.php';
+?>
 
-// AJAX handler for frontend (logged-in + guests)
-add_action('wp_ajax_frontend_my_form_submit',        'frontend_my_form_submit_handler');
-add_action('wp_ajax_nopriv_frontend_my_form_submit', 'frontend_my_form_submit_handler');
 
-function frontend_my_form_submit_handler() {
-    // Security
-    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'frontend_my_form_action')) {
-        wp_send_json_error(['message' => 'Security check failed']);
-        exit;
-    }
+<form method="POST" style="display:flex; flex-direction:column; gap:15px;">
+  <input type="text" placeholder="name" name="name" required style="padding:12px; font-size:16px;">
+  <input type="email" placeholder="email" name="email" required style="padding:12px; font-size:16px;">
+  <textarea type="message" placeholder="your messgage" name="message" required style="padding:12px; font-size:16px;"></textarea>
+  <button type="submit" name="simple_form_submitted" value="1" required style="padding:12px; font-size:16px;">
+                SEND
+ </button>
+</form>
 
-    $name    = isset($_POST['name'])    ? sanitize_text_field($_POST['name'])    : '';
-    $email   = isset($_POST['email'])   ? sanitize_email($_POST['email'])       : '';
-    $message = isset($_POST['message']) ? sanitize_textarea_field($_POST['message']) : '';
-
-    // Basic validation
-    if (empty($name) || empty($email) || !is_email($email)) {
-        wp_send_json_error(['message' => 'Please fill Name and valid Email']);
-        exit;
-    }
-
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'my_form_data';
-
-    $inserted = $wpdb->insert(
-        $table_name,
-        [
-            'name'       => $name,
-            'email'      => $email,
-            'message'    => $message,
-            'active'     => 1,                    // auto-active for frontend submissions
-            'date_time'  => current_time('mysql'), // match your column name
-        ],
-        ['%s', '%s', '%s', '%d', '%s']
-    );
-
-    if ($inserted === false) {
-        wp_send_json_error(['message' => 'Failed to save your data. Please try again.']);
-        exit;
-    }
-
-    // Automatically send confirmation email
-    $email_sent = my_form_send_email_to_user($name, $email, $message);
-
-    // Response for SweetAlert
-    wp_send_json_success([
-        'message' => 'Thank you! We received your message.<br>Confirmation sent to: <strong>' . esc_html($email) . '</strong>',
-        'email_sent' => $email_sent ? true : false
-    ]);
+<?php
+return ob_get_clean(); // return collected HTML
 }
+add_shortcode('simple_custom_form','show_simple_custom_form_shortcode');
+
